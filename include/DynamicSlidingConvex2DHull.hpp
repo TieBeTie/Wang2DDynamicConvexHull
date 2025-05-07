@@ -12,25 +12,28 @@ class DynamicSlidingConvex2DHull {
 
  private:
   int nextX_ = 0, leftX_ = 0;
-  WangConvexHull convex_hull_;
+  WangConvexHull convex_hull_upper_;
+  WangConvexHull convex_hull_lower_;
 };
 
 void DynamicSlidingConvex2DHull::Add(double y) {
-  convex_hull_.pushRight({nextX_, y});
+  convex_hull_upper_.pushRight({nextX_, y});
+  convex_hull_lower_.pushRight({nextX_, -y});
   nextX_++;
-  convex_hull_.PrintDebug();
+  // convex_hull_upper_.PrintDebug();
 }
 
 void DynamicSlidingConvex2DHull::Remove() {
-  convex_hull_.popLeft();
+  convex_hull_upper_.popLeft();
+  convex_hull_lower_.popLeft();
   leftX_++;
-  convex_hull_.PrintDebug();
+  // convex_hull_upper_.PrintDebug();
 }
 
 double DynamicSlidingConvex2DHull::upperTangentFromRightmostPoint() const {
-  return convex_hull_.upperTangentFromRightmostPoint();
+  return convex_hull_upper_.upperTangentFromRightmostPoint();
 }
 
 double DynamicSlidingConvex2DHull::lowerTangentFromRightmostPoint() const {
-  return convex_hull_.lowerTangentFromRightmostPoint();
+  return -convex_hull_lower_.upperTangentFromRightmostPoint();
 }
