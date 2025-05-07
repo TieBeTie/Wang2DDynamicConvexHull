@@ -20,6 +20,28 @@ class WangConvexHull {
   bool empty() const;
   double upperTangentFromRightmostPoint() const;
   double lowerTangentFromRightmostPoint() const;
+  void PrintDebug() const {
+    std::cout << "Left Hull: ";
+    for (const auto& node : convex_left_upper_hull_) {
+      std::cout << node.lock()->p.x << " ";
+    }
+    std::cout << std::endl;
+    std::cout << "Right Hull: ";
+    for (const auto& node : convex_right_upper_hull_) {
+      std::cout << node.lock()->p.x << " ";
+    }
+    std::cout << std::endl;
+    if (t1_ != convex_left_upper_hull_.end()) {
+      std::cout << "t1: " << t1_->lock()->p.x << std::endl;
+    } else {
+      std::cout << "t1: None" << std::endl;
+    }
+    if (t2_ != convex_right_upper_hull_.end()) {
+      std::cout << "t2: " << t2_->lock()->p.x << std::endl;
+    } else {
+      std::cout << "t2: None" << std::endl;
+    }
+  }
 
  private:
   std::list<std::weak_ptr<NodeS1>> convex_left_upper_hull_;
@@ -48,11 +70,20 @@ class WangConvexHull {
     return std::prev(convex_right_upper_hull_.end());
   }
 
+  Point getRightmostPoint() const {
+    if (convex_left_upper_hull_.empty() && convex_right_upper_hull_.empty()) {
+      throw std::logic_error("S1 and S2 are empty during getRightmostPoint");
+    }
+    return GetRightmostNodeIt() != convex_right_upper_hull_.end()
+               ? GetRightmostNodeIt()->lock()->p
+               : convex_left_upper_hull_.rbegin()->lock()->p;
+  }
+
  private:
   // insertion-type tangent searching procedure
   void UpdateTangentAfterInsertion();
   // deletion-type tangent searching procedure
-  void DeletionTangentSearch();
+  void UpdateTangentAfterDeletion();
   // left-hull construction procedure
   void RebuildLeftHull();
   void GrahamScanS2();
@@ -64,6 +95,7 @@ class WangConvexHull {
                   const std::weak_ptr<Node>& c) const;
   bool TryShiftT1Leftwards();
   bool TryShiftT2Leftwards();
+  Point GetUpperPointAdjacentToRightmostPoint() const;
 };
 
 void WangConvexHull::pushRight(const Point& p) {
@@ -80,26 +112,25 @@ void WangConvexHull::pushRight(const Point& p) {
 
 void WangConvexHull::popLeft() {
   if (convex_left_upper_hull_.empty()) {
-    throw std::logic_error("S1 is empty during popLeft");
-  }
-
-  bool is_tangent_changed = GetLeftmostNodeIt() == t1_;
-  active_left_points_.pop_front();
-  convex_left_upper_hull_.pop_front();
-  // 4.1 Deletions
-  if (convex_left_upper_hull_.size() == 1) {
     RebuildLeftHull();
-    return;
   }
+  // 4.1 Deletions
   // If p_i ̸= t1, then pi
   // is strictly to the left of t1 and t1t2 is still the common tangent
   // of the new S1 and S2, and thus we are done with the deletion
-  t1_ = convex_left_upper_hull_.begin();  // new t1 after deletion
+  bool is_tangent_changed =
+      GetLeftmostNodeIt() == t1_ && t1_ != convex_left_upper_hull_.end();
+  active_left_points_.pop_front();
+  convex_left_upper_hull_.pop_front();
+  if (is_tangent_changed) {
+    t1_ = convex_left_upper_hull_.begin();  // new t1 after deletion
+  }
   // 3.3 Deletions
+
   RestoreS1LeftSide();
 
   if (is_tangent_changed) {
-    DeletionTangentSearch();
+    UpdateTangentAfterDeletion();
   }
 }
 
@@ -111,25 +142,25 @@ inline bool WangConvexHull::empty() const { return false; }
 
 void WangConvexHull::RebuildLeftHull() {
   // rebuild left hull with GrahamHistoryStack based on active_right_points_
-  for (Point p = (*active_right_points_.rbegin())->p;
-       !active_right_points_.empty(); p = (*active_right_points_.rbegin())->p) {
+  if (convex_right_upper_hull_.empty()) {
+    throw std::logic_error("S2 is empty during RebuildLeftHull");
+  }
+  convex_right_upper_hull_.clear();
+  while (!active_right_points_.empty()) {
+    Point p = (*active_right_points_.rbegin())->p;
     active_right_points_.pop_back();
     active_left_points_.emplace_front(std::make_shared<NodeS1>(p));
-    while (convex_left_upper_hull_.size() >= 2) {
-      if (IsRightTurn(active_left_points_.front(),
+    while (convex_left_upper_hull_.size() >= 2 &&
+           IsLeftTurn(active_left_points_.front(),
                       *(convex_left_upper_hull_.begin()),
                       *(std::next(convex_left_upper_hull_.begin())))) {
-        convex_left_upper_hull_.pop_back();
-      } else {
-        convex_left_upper_hull_.begin()->lock()->graham_history_stack.push(
-            active_left_points_.front());
-        convex_left_upper_hull_.emplace_back(active_left_points_.front());
-        break;
-      }
+      convex_left_upper_hull_.pop_front();
     }
-    if (active_left_points_.size() <= 2) {
-      convex_left_upper_hull_.emplace_front(active_left_points_.front());
+    if (!convex_left_upper_hull_.empty()) {
+      convex_left_upper_hull_.begin()->lock()->graham_history_stack.push(
+          active_left_points_.front());
     }
+    convex_left_upper_hull_.emplace_front(active_left_points_.front());
   }
 }
 
@@ -148,13 +179,16 @@ void WangConvexHull::GrahamScanS2() {
 }
 
 void WangConvexHull::RestoreS1LeftSide() {
+  if (convex_left_upper_hull_.empty()) {
+    return;
+  }
   convex_left_upper_hull_.begin()->lock()->graham_history_stack.pop();
-  for (auto first_node_graham_history_stack =
-           convex_left_upper_hull_.begin()->lock()->graham_history_stack;
-       !first_node_graham_history_stack.empty() &&
-       !first_node_graham_history_stack.top().expired();
-       convex_left_upper_hull_.push_front(
-           first_node_graham_history_stack.top()));
+  auto node = convex_left_upper_hull_.front().lock();
+  while (!node->graham_history_stack.empty() &&
+         !node->graham_history_stack.top().expired()) {
+    node = node->graham_history_stack.top().lock();
+    convex_left_upper_hull_.emplace_front(node);
+  }
 }
 
 bool WangConvexHull::IsRightTurn(const std::weak_ptr<Node>& a,
@@ -170,6 +204,11 @@ bool WangConvexHull::IsLeftTurn(const std::weak_ptr<Node>& a,
 }
 
 void WangConvexHull::UpdateTangentAfterInsertion() {
+  if (convex_left_upper_hull_.empty() || convex_right_upper_hull_.empty()) {
+    t1_ = convex_left_upper_hull_.end();
+    t2_ = convex_right_upper_hull_.end();
+    return;
+  }
   // Let q be the vertex such that qqj is the edge of the
   // new hull U(S2) (e.g., see Fig. 1).
   bool condition1 = false;
@@ -187,7 +226,7 @@ void WangConvexHull::UpdateTangentAfterInsertion() {
   }
   if (!condition1 && !condition2) {
     t2_ = GetRightmostNodeIt();
-    while (std::prev(t1_) != convex_left_upper_hull_.begin() &&
+    while (t1_ != convex_left_upper_hull_.begin() &&
            IsLeftTurn(*std::prev(t1_), *t1_, *t2_)) {
       t1_ = std::prev(t1_);
     }
@@ -195,9 +234,12 @@ void WangConvexHull::UpdateTangentAfterInsertion() {
 }
 
 bool WangConvexHull::TryShiftT1Leftwards() {
+  if (convex_left_upper_hull_.empty()) {
+    throw std::logic_error("S1 is empty during TryShiftT1Leftwards");
+  }
   bool is_tangent_changed = false;
   while (convex_left_upper_hull_.begin() != t1_ &&
-         IsRightTurn(*std::prev(t1_), *t1_, *t2_)) {
+         IsLeftTurn(*std::prev(t1_), *t1_, *t2_)) {
     t1_ = std::prev(t1_);
     is_tangent_changed = true;
   }
@@ -205,9 +247,12 @@ bool WangConvexHull::TryShiftT1Leftwards() {
 }
 
 bool WangConvexHull::TryShiftT2Leftwards() {
+  if (convex_right_upper_hull_.empty()) {
+    throw std::logic_error("S2 is empty during TryShiftT2Leftwards");
+  }
   bool is_tangent_changed = false;
   while (convex_right_upper_hull_.begin() != t2_ &&
-         IsRightTurn(*t1_, *t2_, *std::prev(t2_))) {
+         IsLeftTurn(*t1_, *t2_, *std::prev(t2_))) {
     t2_ = std::prev(t2_);
     is_tangent_changed = true;
   }
@@ -218,7 +263,15 @@ bool WangConvexHull::TryShiftT2Leftwards() {
 // Then we move t₂ leftwards on U(S₂) until p t₂ is also tangent to U(S₂).
 // If the tangency with U(S₁) is lost, we repeat the process.
 
-void WangConvexHull::DeletionTangentSearch() {
+void WangConvexHull::UpdateTangentAfterDeletion() {
+  if (convex_left_upper_hull_.empty() || convex_right_upper_hull_.empty()) {
+    t1_ = convex_left_upper_hull_.end();
+    t2_ = convex_right_upper_hull_.end();
+    return;
+  }
+  t1_ = t1_ == convex_left_upper_hull_.end() || t1_->expired()
+            ? std::prev(convex_left_upper_hull_.end())
+            : t1_;
   while (TryShiftT1Leftwards() || TryShiftT2Leftwards());
 }
 
@@ -231,14 +284,20 @@ double WangConvexHull::upperTangentFromRightmostPoint() const {
   if (convex_left_upper_hull_.size() + convex_right_upper_hull_.size() <= 1) {
     return 0;
   }
-  Point rightmost_point = GetRightmostNodeIt()->lock()->p;
-  Point adjacent_vertex;
-  if (GetRightmostNodeIt() != convex_right_upper_hull_.begin()) {
-    adjacent_vertex = std::prev(GetRightmostNodeIt())->lock()->p;
-  } else {
-    adjacent_vertex = t1_->lock()->p;
-  }
-  return geometry::GetAngle(rightmost_point, adjacent_vertex);
+  Point rightmost_point = getRightmostPoint();
+  Point adjacent_vertex = GetUpperPointAdjacentToRightmostPoint();
+
+  return -geometry::GetAngle(adjacent_vertex, rightmost_point);
 }
 
 double WangConvexHull::lowerTangentFromRightmostPoint() const { return 0; }
+
+Point WangConvexHull::GetUpperPointAdjacentToRightmostPoint() const {
+  if (convex_right_upper_hull_.empty()) {
+    return std::next(convex_left_upper_hull_.rbegin())->lock()->p;
+  }
+  if (t2_ == GetRightmostNodeIt()) {
+    return t1_->lock()->p;
+  }
+  return std::next(convex_right_upper_hull_.rbegin())->lock()->p;
+}
