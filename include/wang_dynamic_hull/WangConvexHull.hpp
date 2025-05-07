@@ -225,8 +225,19 @@ void WangConvexHull::DeletionTangentSearch() {
 void WangConvexHull::ValidateInvariants() const {}
 
 double WangConvexHull::upperTangentFromRightmostPoint() const {
+  if (convex_right_upper_hull_.empty()) {
+    throw std::logic_error("S2 is empty during upperTangentFromRightmostPoint");
+  }
+  if (convex_left_upper_hull_.size() + convex_right_upper_hull_.size() <= 1) {
+    return 0;
+  }
   Point rightmost_point = GetRightmostNodeIt()->lock()->p;
-  Point adjacent_vertex = std::prev(GetRightmostNodeIt())->lock()->p;
+  Point adjacent_vertex;
+  if (GetRightmostNodeIt() != convex_right_upper_hull_.begin()) {
+    adjacent_vertex = std::prev(GetRightmostNodeIt())->lock()->p;
+  } else {
+    adjacent_vertex = t1_->lock()->p;
+  }
   return geometry::GetAngle(rightmost_point, adjacent_vertex);
 }
 
