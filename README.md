@@ -1,3 +1,7 @@
+## Visualizations
+
+Visualizations of the convex hull computation steps can be found in the `visualizations/hull_charts` directory. These images show the state of the hull at various steps of the algorithm.
+
 # C++ Pennant Feature (Sliding-Window Convex Hull)
 
 ## Tools & Dependencies
@@ -38,3 +42,4 @@ ctest
 ```bash
 clang-format -i include/*.hpp src/*.cpp tests/*.cpp
 ```
+
