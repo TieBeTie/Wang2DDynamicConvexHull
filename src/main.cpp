@@ -5,8 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "Calculator.hpp"
-#include "DynamicSlidingConvex2DHull.hpp"
+#include "calculator.hpp"
 #include "geometry/geometry_utils.hpp"
 #include "io_utils.hpp"
 

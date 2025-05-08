@@ -8,8 +8,8 @@
 #include <vector>
 
 #include "../geometry/geometry_utils.hpp"
-#include "NodeS1.hpp"
-#include "NodeS2.hpp"
+#include "node_left_set.hpp"
+#include "node_right_set.hpp"
 
 class WangConvexHull {
  public:
@@ -20,59 +20,40 @@ class WangConvexHull {
   bool empty() const;
   double upperTangentFromRightmostPoint() const;
   double lowerTangentFromRightmostPoint() const;
-  void PrintDebug() const {
-    std::cout << "Left Hull: ";
-    for (const auto& node : convex_left_upper_hull_) {
-      std::cout << node.lock()->p.x << " ";
-    }
-    std::cout << std::endl;
-    std::cout << "Right Hull: ";
-    for (const auto& node : convex_right_upper_hull_) {
-      std::cout << node.lock()->p.x << " ";
-    }
-    std::cout << std::endl;
-    if (t1_ != convex_left_upper_hull_.end()) {
-      std::cout << "t1: " << t1_->lock()->p.x << std::endl;
-    } else {
-      std::cout << "t1: None" << std::endl;
-    }
-    if (t2_ != convex_right_upper_hull_.end()) {
-      std::cout << "t2: " << t2_->lock()->p.x << std::endl;
-    } else {
-      std::cout << "t2: None" << std::endl;
-    }
-  }
+
+  friend void PrintWangConvexHullDebugInfo(const WangConvexHull& hull);
 
  private:
-  std::list<std::weak_ptr<NodeS1>> convex_left_upper_hull_;
-  std::list<std::weak_ptr<NodeS2>> convex_right_upper_hull_;
+  std::list<std::weak_ptr<RNode>> convex_left_upper_hull_;
+  std::list<std::weak_ptr<LNode>> convex_right_upper_hull_;
 
-  std::list<std::shared_ptr<NodeS1>> active_left_points_;
-  std::list<std::shared_ptr<NodeS2>> active_right_points_;
+  std::list<std::shared_ptr<RNode>> active_left_points_;
+  std::list<std::shared_ptr<LNode>> active_right_points_;
 
-  std::list<std::weak_ptr<NodeS1>>::iterator t1_ =
-      convex_left_upper_hull_.end();
-  std::list<std::weak_ptr<NodeS2>>::iterator t2_ =
+  std::list<std::weak_ptr<RNode>>::iterator t1_ = convex_left_upper_hull_.end();
+  std::list<std::weak_ptr<LNode>>::iterator t2_ =
       convex_right_upper_hull_.end();
 
-  std::list<std::weak_ptr<NodeS1>>::iterator GetLeftmostNodeIt() {
+  std::list<std::weak_ptr<RNode>>::iterator GetLeftmostNodeIt() {
     return convex_left_upper_hull_.begin();
   }
-  std::list<std::weak_ptr<NodeS1>>::const_iterator GetLeftmostNodeIt() const {
+  std::list<std::weak_ptr<RNode>>::const_iterator GetLeftmostNodeIt() const {
     return convex_left_upper_hull_.begin();
   }
 
-  std::list<std::weak_ptr<NodeS2>>::iterator GetRightmostNodeIt() {
+  std::list<std::weak_ptr<LNode>>::iterator GetRightmostNodeIt() {
     return std::prev(convex_right_upper_hull_.end());
   }
 
-  std::list<std::weak_ptr<NodeS2>>::const_iterator GetRightmostNodeIt() const {
+  std::list<std::weak_ptr<LNode>>::const_iterator GetRightmostNodeIt() const {
     return std::prev(convex_right_upper_hull_.end());
   }
 
   Point getRightmostPoint() const {
     if (convex_left_upper_hull_.empty() && convex_right_upper_hull_.empty()) {
-      throw std::logic_error("S1 and S2 are empty during getRightmostPoint");
+      throw std::logic_error(
+          "left convex hull and right convex hull are empty during "
+          "getRightmostPoint");
     }
     return GetRightmostNodeIt() != convex_right_upper_hull_.end()
                ? GetRightmostNodeIt()->lock()->p
@@ -86,9 +67,8 @@ class WangConvexHull {
   void UpdateTangentAfterDeletion();
   // left-hull construction procedure
   void RebuildLeftHull();
-  void GrahamScanS2();
-  void RestoreS1LeftSide();
-  void ValidateInvariants() const;
+  void RightHullGrahamRestore();
+  void LeftHullRestoreByHistoryStack();
   bool IsRightTurn(const std::weak_ptr<Node>& a, const std::weak_ptr<Node>& b,
                    const std::weak_ptr<Node>& c) const;
   bool IsLeftTurn(const std::weak_ptr<Node>& a, const std::weak_ptr<Node>& b,
@@ -101,11 +81,11 @@ class WangConvexHull {
 void WangConvexHull::pushRight(const Point& p) {
   // 3.2 Insertions
   // Update hull
-  active_right_points_.emplace_back(std::make_shared<NodeS2>(p));
+  active_right_points_.emplace_back(std::make_shared<LNode>(p));
   convex_right_upper_hull_.emplace_back(active_right_points_.back());
 
-  GrahamScanS2();
-  // actual t2 point can be changed by GrahamScanS2
+  RightHullGrahamRestore();
+  // actual t2 point can be changed by GrahamScanright convex hull
 
   UpdateTangentAfterInsertion();
 }
@@ -117,7 +97,8 @@ void WangConvexHull::popLeft() {
   // 4.1 Deletions
   // If p_i ̸= t1, then pi
   // is strictly to the left of t1 and t1t2 is still the common tangent
-  // of the new S1 and S2, and thus we are done with the deletion
+  // of the new left convex hull and right convex hull, and thus we are done
+  // with the deletion
   bool is_tangent_changed =
       GetLeftmostNodeIt() == t1_ && t1_ != convex_left_upper_hull_.end();
   active_left_points_.pop_front();
@@ -127,7 +108,7 @@ void WangConvexHull::popLeft() {
   }
   // 3.3 Deletions
 
-  RestoreS1LeftSide();
+  LeftHullRestoreByHistoryStack();
 
   if (is_tangent_changed) {
     UpdateTangentAfterDeletion();
@@ -143,13 +124,13 @@ inline bool WangConvexHull::empty() const { return false; }
 void WangConvexHull::RebuildLeftHull() {
   // rebuild left hull with GrahamHistoryStack based on active_right_points_
   if (convex_right_upper_hull_.empty()) {
-    throw std::logic_error("S2 is empty during RebuildLeftHull");
+    throw std::logic_error("right convex hull is empty during RebuildLeftHull");
   }
   convex_right_upper_hull_.clear();
   while (!active_right_points_.empty()) {
     Point p = (*active_right_points_.rbegin())->p;
     active_right_points_.pop_back();
-    active_left_points_.emplace_front(std::make_shared<NodeS1>(p));
+    active_left_points_.emplace_front(std::make_shared<RNode>(p));
     while (convex_left_upper_hull_.size() >= 2 &&
            IsLeftTurn(active_left_points_.front(),
                       *(convex_left_upper_hull_.begin()),
@@ -164,7 +145,7 @@ void WangConvexHull::RebuildLeftHull() {
   }
 }
 
-void WangConvexHull::GrahamScanS2() {
+void WangConvexHull::RightHullGrahamRestore() {
   while (convex_right_upper_hull_.size() >= 3) {
     auto it_last = std::prev(convex_right_upper_hull_.end());
     auto it_mid = std::prev(it_last);
@@ -178,7 +159,7 @@ void WangConvexHull::GrahamScanS2() {
   }
 }
 
-void WangConvexHull::RestoreS1LeftSide() {
+void WangConvexHull::LeftHullRestoreByHistoryStack() {
   if (convex_left_upper_hull_.empty()) {
     return;
   }
@@ -210,7 +191,7 @@ void WangConvexHull::UpdateTangentAfterInsertion() {
     return;
   }
   // Let q be the vertex such that qqj is the edge of the
-  // new hull U(S2) (e.g., see Fig. 1).
+  // new hull U(right convex hull) (e.g., see Fig. 1).
   bool condition1 = false;
   bool condition2 = false;
   if (convex_right_upper_hull_.size() == 1) {
@@ -235,7 +216,8 @@ void WangConvexHull::UpdateTangentAfterInsertion() {
 
 bool WangConvexHull::TryShiftT1Leftwards() {
   if (convex_left_upper_hull_.empty()) {
-    throw std::logic_error("S1 is empty during TryShiftT1Leftwards");
+    throw std::logic_error(
+        "left convex hull is empty during TryShiftT1Leftwards");
   }
   bool is_tangent_changed = false;
   while (convex_left_upper_hull_.begin() != t1_ &&
@@ -248,7 +230,8 @@ bool WangConvexHull::TryShiftT1Leftwards() {
 
 bool WangConvexHull::TryShiftT2Leftwards() {
   if (convex_right_upper_hull_.empty()) {
-    throw std::logic_error("S2 is empty during TryShiftT2Leftwards");
+    throw std::logic_error(
+        "right convex hull is empty during TryShiftT2Leftwards");
   }
   bool is_tangent_changed = false;
   while (convex_right_upper_hull_.begin() != t2_ &&
@@ -275,11 +258,10 @@ void WangConvexHull::UpdateTangentAfterDeletion() {
   while (TryShiftT1Leftwards() || TryShiftT2Leftwards());
 }
 
-void WangConvexHull::ValidateInvariants() const {}
-
 double WangConvexHull::upperTangentFromRightmostPoint() const {
   if (convex_right_upper_hull_.empty()) {
-    throw std::logic_error("S2 is empty during upperTangentFromRightmostPoint");
+    throw std::logic_error(
+        "right convex hull is empty during upperTangentFromRightmostPoint");
   }
   if (convex_left_upper_hull_.size() + convex_right_upper_hull_.size() <= 1) {
     return 0;

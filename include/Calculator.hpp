@@ -2,8 +2,8 @@
 
 #include <vector>
 
-#include "DynamicSlidingConvex2DHull.hpp"
 #include "geometry/geometry_utils.hpp"
+#include "sliding_convex_2d_hull.hpp"
 
 /**
  * Calculates angles using a sliding convex hull

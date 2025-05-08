@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include "geometry/Point.hpp"
+#include "geometry/point.hpp"
 
 struct Node {
   Node(const Point& p) : p(p) {}

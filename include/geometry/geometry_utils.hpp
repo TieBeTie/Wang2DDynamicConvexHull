@@ -1,7 +1,7 @@
 #pragma once
 
-#include "geometry/Angles.hpp"
-#include "geometry/Point.hpp"
+#include "geometry/angles.hpp"
+#include "geometry/point.hpp"
 
 namespace geometry {
 

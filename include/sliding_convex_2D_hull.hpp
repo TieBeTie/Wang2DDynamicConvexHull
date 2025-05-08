@@ -1,6 +1,6 @@
 #pragma once
 #include "geometry/geometry_utils.hpp"
-#include "wang_dynamic_hull/WangConvexHull.hpp"
+#include "wang_dynamic_hull/wang_upper_convex_hull.hpp"
 
 class DynamicSlidingConvex2DHull {
  public:
@@ -20,14 +20,12 @@ void DynamicSlidingConvex2DHull::Add(double y) {
   convex_hull_upper_.pushRight({nextX_, y});
   convex_hull_lower_.pushRight({nextX_, -y});
   nextX_++;
-  // convex_hull_upper_.PrintDebug();
 }
 
 void DynamicSlidingConvex2DHull::Remove() {
   convex_hull_upper_.popLeft();
   convex_hull_lower_.popLeft();
   leftX_++;
-  // convex_hull_upper_.PrintDebug();
 }
 
 double DynamicSlidingConvex2DHull::upperTangentFromRightmostPoint() const {

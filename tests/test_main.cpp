@@ -4,10 +4,10 @@
 #include <string>
 #include <vector>
 
-#include "Calculator.hpp"
-#include "DynamicSlidingConvex2DHull.hpp"
+#include "calculator.hpp"
 #include "geometry/geometry_utils.hpp"
 #include "io_utils.hpp"
+#include "sliding_convex_2d_hull.hpp"
 
 static constexpr double EPS = 1e-5;
 
