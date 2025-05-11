@@ -14,7 +14,9 @@
 class WangConvexHull {
  public:
   WangConvexHull() = default;
+  // O(1) amortized time complexity!
   void pushRight(const Point& p);
+  // O(1) amortized time complexity!
   void popLeft();
   const Point& back() const;
   bool empty() const;
@@ -78,6 +80,7 @@ class WangConvexHull {
   Point GetUpperPointAdjacentToRightmostPoint() const;
 };
 
+// O(1) amortized time complexity!
 void WangConvexHull::pushRight(const Point& p) {
   // 3.2 Insertions
   // Update hull
@@ -90,6 +93,7 @@ void WangConvexHull::pushRight(const Point& p) {
   UpdateTangentAfterInsertion();
 }
 
+// O(1) amortized time complexity!
 void WangConvexHull::popLeft() {
   if (convex_left_upper_hull_.empty()) {
     RebuildLeftHull();
