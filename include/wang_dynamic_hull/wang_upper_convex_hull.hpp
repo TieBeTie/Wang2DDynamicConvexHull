@@ -84,7 +84,7 @@ class WangConvexHull {
 void WangConvexHull::pushRight(const Point& p) {
   // 3.2 Insertions
   // Update hull
-  active_right_points_.emplace_back(std::make_shared<LNode>(p));
+  active_right_points_.emplace_back(std::shared_ptr<LNode>(new LNode(p)));
   convex_right_upper_hull_.emplace_back(active_right_points_.back());
 
   RightHullGrahamRestore();
@@ -134,7 +134,7 @@ void WangConvexHull::RebuildLeftHull() {
   while (!active_right_points_.empty()) {
     Point p = (*active_right_points_.rbegin())->p;
     active_right_points_.pop_back();
-    active_left_points_.emplace_front(std::make_shared<RNode>(p));
+    active_left_points_.emplace_front(std::shared_ptr<RNode>(new RNode(p)));
     while (convex_left_upper_hull_.size() >= 2 &&
            IsLeftTurn(active_left_points_.front(),
                       *(convex_left_upper_hull_.begin()),

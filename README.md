@@ -6,7 +6,7 @@ Visualizations of the convex hull computation steps can be found in the `visuali
 
 ## Tools & Dependencies
 - **C++17** (or later)
-- **CMake** (version ≥ 3.14)
+- **CMake** (version  3.14)
 - **Google Test** (via `find_package(GTest)`)
 - **clang-format** (for code formatting)
 - Any C++-capable IDE/editor with CMake support
